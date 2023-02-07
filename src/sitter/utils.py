@@ -24,7 +24,7 @@ class cached_property:
             '__set_name__() on it.'
         )
 
-    def __init__(self, func: Callable, name: Optional[str] = None) -> None:
+    def __init__(self, func: Callable, _: Optional[str] = None) -> None:
         self.real_func: Callable = func
         self.__doc__: str = getattr(func, '__doc__')
 

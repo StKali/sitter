@@ -1,17 +1,18 @@
 #!usr/bin/env python
 # -*- coding: utf-8 -*-
 # date: 2022/11/12
+"""
+
+"""
 
 import re
 import sys
-import os 
+from os import path as op
 from functools import lru_cache
-from typing import NoReturn, Any, List, Dict, Optional, Callable, Type, Tuple, IO, Iterable
+from typing import NoReturn, Any, List, Dict, Optional, Callable, Set, Type, Tuple, IO, Iterable
 
 from .utils import empty, cached_property
 
-
-CmdType: Type = Type['Command']
 
 if sys.version_info > (3, 10):
     from types import NoneType
@@ -19,9 +20,22 @@ else:
     NoneType = type(None)
 
 SHORT_RGX = re.compile('^-[a-zA-Z0-9]$')
-LONG_RGX = re.compile('^--[a-zA-Z][a-zA-Z0-9-_]$')
+LONG_RGX = re.compile('^--[a-zA-Z][a-zA-Z0-9-]')
 FLEX: Any = object()
 ALL: Any = object()
+CmdType: Type = Type['Command']
+
+
+class SitterError(Exception):
+    """"""
+
+
+class ParamsParseError(SitterError):
+    """"""
+
+
+class ArgumentError(SitterError):
+    """"""
 
 
 if sys.version_info > (3, 8):
@@ -30,14 +44,13 @@ if sys.version_info > (3, 8):
 
     @dataclass
     class _Argument:
-
         short: str = ''
         long: str = ''
         default: Any = empty
         docs: str = ''
         count: int = 1
-        required: bool = True
-        key: str = empty,
+        required: bool = False
+        key: str = empty
         mutex: Any = None
         exclusive: bool = False
 
@@ -51,7 +64,7 @@ else:
             default: Any = empty,
             docs: str = '',
             count: int = 1,
-            required: bool = True,
+            required: bool = False,
             key: str = empty,
             mutex: Any = None,
             exclusive: bool = False
@@ -72,20 +85,20 @@ else:
 
 class Argument(_Argument):
 
-    def validate(self) -> Optional[str]:
+    def check(self) -> Optional[str]:
 
         if not self.short and not self.long:
             return'short and long all empty'
         
         if self.short and not SHORT_RGX.findall(self.short):
-            return 'invalid short argument %s' % self.short
+            return 'invalid short argument %r' % self.short
 
         if self.long and not LONG_RGX.findall(self.long):
-            return 'invalid short argument %s' % self.long
+            return 'invalid long argument %r' % self.long
 
         if not self.key and not self.long:
             return 'key and long cannot be default at the same time'
-        
+
         if not self.key:
             self.key = self.long.lstrip('-')
         
@@ -93,11 +106,14 @@ class Argument(_Argument):
 
         if self.count == 0 and self.default is empty:
             self.default = False
-    
 
-class Output:
 
-    """"""
+def check_error(ret: Any) -> None:
+    if not ret:
+        return
+    print('Error: %s' % ret, file=sys.stderr)
+    sys.exit(1)
+
 
 class NameMapping(dict):
 
@@ -117,7 +133,7 @@ class NameMapping(dict):
         return self.__width
 
 
-class CommandMapping(dict):
+class CommandMapping(NameMapping):
 
     def __init__(self,  *args, **kwargs) -> None:
         super(CommandMapping, self).__init__(*args, **kwargs)
@@ -125,7 +141,7 @@ class CommandMapping(dict):
 
     def add_command(self, command: CmdType) -> None:
         if not isinstance(command.name, str):
-            raise AttributeError(
+            raise TypeError(
                 'Command.name want str object but get %r' % command.name 
             )
         self[command.name] = command
@@ -160,7 +176,7 @@ class Options(dict):
 
         if key in self:
             return super(Options, self).__getitem__(key)
-        raise SitterError(
+        raise ParamsParseError(
             'not matches any value for %r in command line arguments' % key
         )
     
@@ -177,7 +193,7 @@ class Options(dict):
 class ArgumentMapping(NameMapping):
 
     def __init__(self, name: str, *args, **kwargs) -> None:
-        super(ArgumentMapping, self).__init__(*args, **kwargs)
+        super(ArgumentMapping, self).__init__(name, *args, **kwargs)
         self.arguments: List[Argument] = list()
 
     def add_argument(self, arg: Argument) -> None:
@@ -196,9 +212,9 @@ class ArgumentMapping(NameMapping):
     
     def help(self) -> str:
         yield self.name
-        fmt: str = '    %-4s%-{length}s'.format(length=self.width)
+        fmt: str = '    %-4s%-{length}s  %s'.format(length=self.width)
         for arg in self:
-            yield fmt % (arg.short, arg.long, arg.doc)
+            yield fmt % (arg.short, arg.long, arg.docs)
     
 
 class Parser:
@@ -227,12 +243,7 @@ class Parser:
     def _add_args(self, mapping: ArgumentMapping, arguments: Tuple[Argument]) -> NoReturn:
 
         for arg in arguments:
-            err: str = arg.validate()
-            if err:
-                raise ArgumentError(
-                    'invalid argument, err: %r' % err
-                )
-            
+            check_error(arg.check())
             if arg in self or not self.set_key(arg.key):
                 raise ArgumentError(
                     'dumplicated argument %s' % arg
@@ -277,9 +288,11 @@ class Parser:
                     data = [data, *value]
                 else:
                     data = [data, value]
+        else:
+            data = value            
+        self.__options[argument.key] = data
     
     def parse_argv(self, argv: List[str]) -> Tuple[Options, List[str]]:
-
         mmp: Dict[str, str] = {}
         argv = list(self.clean_argv(argv))
         remains: List[str] = list()
@@ -293,13 +306,13 @@ class Parser:
 
             argument: Argument = self[arg]
             if argument.exclusive and (remains or self.__options):
-                raise SitterError(
+                raise ParamsParseError(
                     'argument %r is exclusive' % arg 
                 )
             
             if argument.mutex is not None:
                 if argument.mutex in mmp:
-                    raise SitterError(
+                    raise ParamsParseError(
                         'conflict arguments: %r and %r mutex group(%r)' %
                         (arg, mmp[argument.mutex], argument.mutex)
                     )
@@ -332,7 +345,7 @@ class Parser:
             else:
                 data = argv[index: index + argument.count]
                 if len(data) != argument.count:
-                    raise SitterError(
+                    raise ParamsParseError(
                         'not enough arguments for %r' % arg
                     )
                 self.add_option(
@@ -343,8 +356,8 @@ class Parser:
 
         for arg in self:
             if arg.required and arg.key not in self.__options:
-                raise SitterError(
-                    'missing argument: %r' % arg.short or arg.long
+                raise ParamsParseError(
+                    'position argument %r required' % arg.short or arg.long
                 )
         return self.__options, remains
     
@@ -379,9 +392,9 @@ class CommandMeta(type):
     def __new__(cls, *args, **kwargs) -> object:
         self: object = super(CommandMeta, cls).__new__(cls, *args, **kwargs)
         self.subcommands = CommandMapping('Available Commands:')
-        self._parent_class = None
+        self.parent = None
         return self
-    
+
 
 class Command(metaclass=CommandMeta):
 
@@ -394,16 +407,15 @@ class Command(metaclass=CommandMeta):
     expects: Optional[List[str]] = None
     ARGUMENTS: List[Argument] = []
 
-    def __init__(self, args: List[str], parser: Optional[Parser]) -> None:
+    def __init__(self, args: List[str], parser: Optional[Parser] = None) -> None:
         
         self.args: List[str] = args
         self.parser: Optional[Parser] = parser
-        self.out: Output = Output()
 
     def pre_run(self, options: Options, remains: List[str]) -> bool:
         return True
 
-    def run(self, option: Options, remains: List[str]) -> NoReturn:
+    def run(self, options: Options, remains: List[str]) -> NoReturn:
         raise NotImplementedError(
             'subclass of "Command" msut provide a'
             'run(options, remains) method'
@@ -417,22 +429,27 @@ class Command(metaclass=CommandMeta):
         return register(cls, name)
     
     @cached_property
-    def parent(self) -> CmdType:
-        return self._parent_class
-    
-    @cached_property
     def parents(self) -> List[CmdType]:
+        """ get parents command class list
+         
+        Returns: 
+            [parent, ..., root]
+        """
         ps: List[CmdType] = list()
-        head = self._parent_class
+        head = self.parent
         while head:
             ps.append(head)
-            head = head._parent_class
+            head = head.parent
         return ps
     
     def get_version(self) -> str:
-        if self.version is None:
-            self.version = self.parent.version
-        
+        # if self.version is None:
+            # self.version = self.parent.version
+        for p in self.parents[::-1]:
+            if p.version is not None:
+                self.version = p.version
+                break
+
         names = [cls.name for cls in self.parents[::-1]]
         names.append(self.name)
         name: str = '-'.join(names)
@@ -447,7 +464,7 @@ class Command(metaclass=CommandMeta):
                 commands.append('[command]')
             commands.append('-h/--help')
             self.epilog = 'use %r for more information about command.' % ' '.join(commands)
-        return self.apilog
+        return self.epilog
     
     def generate_usage(self) -> str:
 
@@ -470,12 +487,6 @@ class Command(metaclass=CommandMeta):
     @staticmethod
     @lru_cache(maxsize=64)
     def expected_string(*args) -> str:
-        if not args:
-            raise SitterError(
-                # TODO
-                'TODO'
-            )
-
         return ' '.join('<%s>' % expect for expect in args)
     
     def help(self) -> str:
@@ -522,11 +533,11 @@ class Command(metaclass=CommandMeta):
     def filter(self, options: Options, remains: List[str]) -> bool:
 
         if options.get('help'):
-            self.out.printf(self.help())
+            print(self.help())
             return False
         
         if options.get('version'):
-            self.out.printf(self.get_version())
+            print(self.get_version())
             return False
         
         return True
@@ -539,7 +550,7 @@ class Command(metaclass=CommandMeta):
         if self.expects:
             index: int = len(self.expects) - len(remains)
             if index > 0:
-                raise ParseError(
+                raise ParamsParseError(
                     '%r cannot found expected argument %r' % 
                     (self.command_string, self.expected_string(*self.expects[0 - index:])) 
                 )
@@ -557,6 +568,8 @@ class Command(metaclass=CommandMeta):
     
     def __repr__(self) -> str:
         return '%s(%s, %s)' % (type(self).__name__, self.name, self.args)
+
+    __str__ = __repr__
     
 
 class Application(Command):
@@ -564,10 +577,9 @@ class Application(Command):
     GLOBAL_ARGUMENTS: List[Argument] = []
 
     def __init__(self, args: List[str]) -> None:
-        super(Application, self).__init__(args, args[1:])
+        super(Application, self).__init__(args[1:])
         if self.name is None:
-            self.name = args[0]
-        
+            self.name = self.__class__.name = op.basename(args[0])
         self.parser = self.create_parser()
         self.command: Optional[Command] = None
 
@@ -575,7 +587,7 @@ class Application(Command):
         parser = Parser()
         parser.add_global_args(
             Argument('-h', '--help', docs='print help text', default=False, count=0, exclusive=True),
-            Argument('-v', '--version', docs='print version number', default=False, count=0, exclusive=True)
+            Argument('-v', '--version', docs='print version number', default=False, count=0, exclusive=True), 
             * self.GLOBAL_ARGUMENTS
         )
         return parser
@@ -584,23 +596,15 @@ class Application(Command):
 
         try:
             self.handle(*args, **kwargs)
-        except ParserError as exc:
+        except ParamsParseError as exc:
+            check_error(exc)
             self.out.exit(1, '%s\nusage: %s', exc, self.command.generate_usage())
         except SitterError as exc:
             self.out.exit(1, exc)
 
     def handle(self, *args, **kwargs) -> None:
-        if self.name is None:
-            raise TypeError(
-                'Application.name must be a string, not %r' % self.name
-            )
-        
-        if self.version is None:
-            raise TypeError(
-                'Application.version must be a string, not %r' % self.version
-            )
-        
-        command_class, index = self.match_command_class(self.agrs, 0)
+
+        command_class, index = self.match_command_class(self.args, 0)
         self.command: Command = self if isinstance(self, command_class) else command_class(self.args[index:], self.parser)
         self.parser.add_args(*self.command.ARGUMENTS)
 
@@ -626,7 +630,17 @@ class Application(Command):
         self.command(options, remains)
 
 
-def register(parent_cls: CmdType, subcommand: str) -> Callable:
+def register(parent_class: CmdType, subcommand: str) -> Callable:
+
+    if not subcommand or not isinstance(subcommand, str) or not subcommand.isprintable():
+        raise ValueError(
+            'subcommand must be a printable string'
+        )
+
+    if not issubclass(parent_class, Command):
+        raise TypeError(
+            'parent_class must derive from "Command"'
+        )
 
     def wrapper(cls: CmdType) -> Callable:
 
@@ -637,23 +651,13 @@ def register(parent_cls: CmdType, subcommand: str) -> Callable:
         
         if not isinstance(cls.expects, (Iterable, NoneType)):
             raise TypeError(
-                '%s.alias should be iterable' % type(cls).__name__
+                '%s.alias should be iterable not %r' % (cls.__name__, type(cls.expects))
             )
         
-        cls._parent_cls = parent_cls
-        if cls.name is None:
+        cls.parent = parent_class
+        if not cls.name:
             cls.name = subcommand
-        parent_cls.subcommands.add_command(cls)
+        parent_class.subcommands.add_command(cls)
         return cls
+
     return wrapper
-
-
-
-
-
-
-
-
-
-        
-
