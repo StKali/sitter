@@ -9,7 +9,7 @@ import re
 import sys
 from os import path as op
 from functools import lru_cache
-from typing import NoReturn, Any, List, Dict, Optional, Callable, Set, Type, Tuple, IO, Iterable
+from typing import NoReturn, Any, List, Dict, Optional, Callable, Set, Type, Tuple, Iterable
 
 from .utils import empty, cached_property
 
@@ -17,7 +17,7 @@ from .utils import empty, cached_property
 if sys.version_info > (3, 10):
     from types import NoneType
 else:
-    NoneType = type(None)
+    NoneType: Type = type(None)
 
 SHORT_RGX = re.compile('^-[a-zA-Z0-9]$')
 LONG_RGX = re.compile('^--[a-zA-Z][a-zA-Z0-9-]')
@@ -27,7 +27,7 @@ CmdType: Type = Type['Command']
 
 
 class SitterError(Exception):
-    """"""
+    """ base sitter error """
 
 
 class ParamsParseError(SitterError):
@@ -39,7 +39,6 @@ class ArgumentError(SitterError):
 
 
 if sys.version_info > (3, 8):
-
     from dataclasses import dataclass
 
     @dataclass
@@ -53,7 +52,6 @@ if sys.version_info > (3, 8):
         key: str = empty
         mutex: Any = None
         exclusive: bool = False
-
 else:
     class _Argument:
 
@@ -89,21 +87,15 @@ class Argument(_Argument):
 
         if not self.short and not self.long:
             return'short and long all empty'
-        
         if self.short and not SHORT_RGX.findall(self.short):
             return 'invalid short argument %r' % self.short
-
         if self.long and not LONG_RGX.findall(self.long):
             return 'invalid long argument %r' % self.long
-
         if not self.key and not self.long:
             return 'key and long cannot be default at the same time'
-
         if not self.key:
             self.key = self.long.lstrip('-')
-        
         self.docs = self.docs or 'no help doc'
-
         if self.count == 0 and self.default is empty:
             self.default = False
 
@@ -121,12 +113,12 @@ class NameMapping(dict):
         super(NameMapping, self).__init__(*args, **kwargs)
         self.__width: int = 0
         self.name: str = name
-    
+
     def __setitem__(self, key: str, value: Any) -> None:
         if key in self:
             raise ValueError(key)
         super(NameMapping, self).__setitem__(key, value)
-        self.__width = max((self.__width, len(key)))
+        self.__width: int = max((self.__width, len(key)))
 
     @property
     def width(self) -> int:
@@ -239,7 +231,6 @@ class Parser:
             return False
         self.__keys.add(key)
         return True
-    
     def _add_args(self, mapping: ArgumentMapping, arguments: Tuple[Argument]) -> NoReturn:
 
         for arg in arguments:
@@ -550,9 +541,9 @@ class Command(metaclass=CommandMeta):
         if self.expects:
             index: int = len(self.expects) - len(remains)
             if index > 0:
+                expected_string: str = self.expected_string(*self.expects[0 - index:])
                 raise ParamsParseError(
-                    '%r cannot found expected argument %r' % 
-                    (self.command_string, self.expected_string(*self.expects[0 - index:])) 
+                    f'{self.command_string!r} cannot found expected argument {expected_string!r}'
                 )
             for expect in self.expects:
                 options[expect] = remains.pop(0)
@@ -567,12 +558,15 @@ class Command(metaclass=CommandMeta):
             self.post_run(options, remains)
     
     def __repr__(self) -> str:
-        return '%s(%s, %s)' % (type(self).__name__, self.name, self.args)
+        return f'{type(self).__name__}({self.name}, {self.args})'
 
     __str__ = __repr__
-    
+
 
 class Application(Command):
+    """
+
+    """
 
     GLOBAL_ARGUMENTS: List[Argument] = []
 
@@ -584,7 +578,8 @@ class Application(Command):
         self.command: Optional[Command] = None
 
     def create_parser(self) -> Parser:
-        parser = Parser()
+        """ create a command line arguments parser """
+        parser: Parser = Parser()
         parser.add_global_args(
             Argument('-h', '--help', docs='print help text', default=False, count=0, exclusive=True),
             Argument('-v', '--version', docs='print version number', default=False, count=0, exclusive=True), 
@@ -593,31 +588,52 @@ class Application(Command):
         return parser
     
     def exec(self, *args, **kwargs) -> NoReturn:
+        """
+
+        Args:
+            *args:
+            **kwargs:
+
+        Returns:
+
+        """
 
         try:
             self.handle(*args, **kwargs)
         except ParamsParseError as exc:
             check_error(exc)
-            self.out.exit(1, '%s\nusage: %s', exc, self.command.generate_usage())
+            # FIXME print notice docs
         except SitterError as exc:
-            self.out.exit(1, exc)
+            check_error(exc)
 
     def handle(self, *args, **kwargs) -> None:
+        """
+
+        Args:
+            *args:
+            **kwargs:
+
+        Returns:
+
+        """
 
         command_class, index = self.match_command_class(self.args, 0)
-        self.command: Command = self if isinstance(self, command_class) else command_class(self.args[index:], self.parser)
+        self.command: Command = (
+            self if isinstance(self, command_class)
+            else command_class(self.args[index:], self.parser)
+        )
         self.parser.add_args(*self.command.ARGUMENTS)
 
         if self.command.expects:
             for expect in self.command.expects or []:
                 if not isinstance(expect, str):
                     raise TypeError(
-                        'expects want str but get %r' % type(expect).__name__
+                        f'expects want str but get {type(expect).__name__!r}'
                     )
                 
                 if self.parser.has_key(expect):
                     raise ArgumentError(
-                        'conflict argument and expects: %r' % expect
+                        f'conflict argument and expects: {expect!r}'
                     )
 
         options, remains = self.parser.parse_argv(self.command.args)
@@ -631,6 +647,15 @@ class Application(Command):
 
 
 def register(parent_class: CmdType, subcommand: str) -> Callable:
+    """ register subcommand to parent_command
+
+    Args:
+        parent_class:
+        subcommand:
+
+    Returns:
+
+    """
 
     if not subcommand or not isinstance(subcommand, str) or not subcommand.isprintable():
         raise ValueError(
@@ -651,7 +676,7 @@ def register(parent_class: CmdType, subcommand: str) -> Callable:
         
         if not isinstance(cls.expects, (Iterable, NoneType)):
             raise TypeError(
-                '%s.alias should be iterable not %r' % (cls.__name__, type(cls.expects))
+                f'{cls.__name__}.alias should be iterable not {type(cls.expects)!r}'
             )
         
         cls.parent = parent_class
