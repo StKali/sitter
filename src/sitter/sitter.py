@@ -319,13 +319,13 @@ class Parser:
                 continue
 
             if argument.count == FLEX:
-                arg = argv[index]
                 auto = []
-                while index < length and arg not in self:
+                while index < length:
+                    arg = argv[index]
+                    if arg in self:
+                        break
                     auto.append(arg)
                     index += 1
-                    if index < length:
-                        arg = argv[index]
                 self.add_option(argument, auto)
                 continue
 
