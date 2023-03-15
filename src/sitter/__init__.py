@@ -7,7 +7,9 @@ A simple and efficient command-line program framework.
 """
 
 from .setting import PROG, VERSION
-from .sitter import Argument, Application, ALL, Command, register, Options, empty
+from .sitter import (
+    Argument, Application, ALL, FLEX, SitterError, ParamsParseError, ArgumentError, Command, register, Options, empty,
+)
 
 __version__ = VERSION
 __name__ = PROG
