@@ -8,7 +8,8 @@ A simple and efficient command-line program framework.
 
 from .setting import PROG, VERSION
 from .sitter import (
-    Argument, Application, ALL, FLEX, SitterError, ParamsParseError, ArgumentError, Command, register, Options, empty,
+    Argument, Application, ALL, FLEX, SitterError, ParamsParseError, ArgumentError, Command,
+    register, Options, empty,
 )
 
 __version__ = VERSION

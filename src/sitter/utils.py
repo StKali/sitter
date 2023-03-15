@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 # date: 2022/11/12
 
+"""
+A simple utils script
+"""
+
 from typing import Any, Optional, Callable, NoReturn
 
 empty: Any = type(
@@ -48,4 +52,3 @@ class cached_property:
             return self
         res = instance.__dict__[self.name] = self.func(instance)
         return res
-

@@ -564,9 +564,7 @@ class Command(metaclass=CommandMeta):
 
 
 class Application(Command):
-    """
-
-    """
+    """ Application parent class """
 
     GLOBAL_ARGUMENTS: List[Argument] = []
 
@@ -581,8 +579,20 @@ class Application(Command):
         """ create a command line arguments parser """
         parser: Parser = Parser()
         parser.add_global_args(
-            Argument('-h', '--help', docs='print help text', default=False, count=0, exclusive=True),
-            Argument('-v', '--version', docs='print version number', default=False, count=0, exclusive=True), 
+            Argument(
+                '-h', '--help',
+                docs='print help text',
+                default=False,
+                count=0,
+                exclusive=True,
+            ),
+            Argument(
+                '-v', '--version',
+                docs='print version number',
+                default=False,
+                count=0,
+                exclusive=True,
+            ),
             * self.GLOBAL_ARGUMENTS
         )
         return parser

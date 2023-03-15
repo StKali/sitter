@@ -1,11 +1,27 @@
-# Pycharm
-.idea
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
+
+build&public.sh
+# pycharm
+.idea
+
+# pytest
+.benchmarks
+
+# mac
+.DS_Store
+
 *.py[cod]
 *$py.class
 
+# tox
+.tox
+
+# pytest
+.pytest_cache
+
+# Sphinx
+_build
 # C extensions
 *.so
 
