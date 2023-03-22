@@ -1,6 +1,7 @@
 #!usr/bin/env python
 # -*- coding: utf-8 -*-
 # date: 2022/11/12
+
 """
 
 """
@@ -9,10 +10,9 @@ import re
 import sys
 from os import path as op
 from functools import lru_cache
-from typing import NoReturn, Any, List, Dict, Optional, Callable, Set, Type, Tuple, Iterable
+from typing import NoReturn, Any, List, Dict, Optional, Callable, Set, Type, Tuple, Iterable, Union
 
-from .utils import empty, cached_property
-
+from .util import empty, cached_property
 
 if sys.version_info > (3, 10):
     from types import NoneType
@@ -87,14 +87,19 @@ class Argument(_Argument):
 
         if not self.short and not self.long:
             return'short and long all empty'
+
         if self.short and not SHORT_RGX.findall(self.short):
-            return 'invalid short argument %r' % self.short
+            return f'invalid short argument {self.short!r}'
+
         if self.long and not LONG_RGX.findall(self.long):
-            return 'invalid long argument %r' % self.long
+            return f'invalid long argument {self.long!r}'
+
         if not self.key and not self.long:
             return 'key and long cannot be default at the same time'
+
         if not self.key:
             self.key = self.long.lstrip('-')
+
         self.docs = self.docs or 'no help doc'
         if self.count == 0 and self.default is empty:
             self.default = False
@@ -103,7 +108,7 @@ class Argument(_Argument):
 def check_error(ret: Any) -> None:
     if not ret:
         return
-    print('Error: %s' % ret, file=sys.stderr)
+    print(f'Error: {ret}', file=sys.stderr)
     sys.exit(1)
 
 
@@ -134,14 +139,14 @@ class CommandMapping(NameMapping):
     def add_command(self, command: CmdType) -> None:
         if not isinstance(command.name, str):
             raise TypeError(
-                'Command.name want str object but get %r' % command.name 
+                f'Command.name want str object but get {command.name!r}'
             )
         self[command.name] = command
         if command.alias:
             for alias in command.alias:
                 if not isinstance(alias, str):
                     raise TypeError(
-                        'alias want str object but get %r' % alias
+                        f'alias want str object but get {alias!r}'
                     )
                 self.__alias_commands[alias] = command
     
@@ -160,7 +165,7 @@ class CommandMapping(NameMapping):
 
     def __contains__(self, key: object) -> bool:
         return super(CommandMapping, self).__contains__(key) or key in self.__alias_commands
-    
+
 
 class Options(dict):
 
@@ -169,7 +174,7 @@ class Options(dict):
         if key in self:
             return super(Options, self).__getitem__(key)
         raise ParamsParseError(
-            'not matches any value for %r in command line arguments' % key
+            f'not matches any value for {key!r} in command line arguments'
         )
     
     def __setitem__(self, key: str, value: Any) -> NoReturn:
@@ -201,13 +206,13 @@ class ArgumentMapping(NameMapping):
 
     def __repr__(self) -> str:
         return '<%s %s>' % (self.name, super(ArgumentMapping, self).__repr__())
-    
+
     def help(self) -> str:
         yield self.name
         fmt: str = '    %-4s%-{length}s  %s'.format(length=self.width)
         for arg in self:
             yield fmt % (arg.short, arg.long, arg.docs)
-    
+
 
 class Parser:
 
@@ -231,15 +236,13 @@ class Parser:
             return False
         self.__keys.add(key)
         return True
+
     def _add_args(self, mapping: ArgumentMapping, arguments: Tuple[Argument]) -> NoReturn:
 
         for arg in arguments:
             check_error(arg.check())
             if arg in self or not self.set_key(arg.key):
-                raise ArgumentError(
-                    'dumplicated argument %s' % arg
-                )
-            
+                raise ArgumentError(f'duplicated argument {arg!r}%s')
             mapping.add_argument(arg)
 
     def add_args(self, *arguments: Argument) -> None:
@@ -266,7 +269,6 @@ class Parser:
             yield arg
 
     def add_option(self, argument: Argument, value: Any) -> NoReturn:
-        
         if argument.key in self.__options:
             data = self.__options[argument.key]
             if isinstance(data, list):
@@ -280,7 +282,7 @@ class Parser:
                 else:
                     data = [data, value]
         else:
-            data = value            
+            data = value
         self.__options[argument.key] = data
     
     def parse_argv(self, argv: List[str]) -> Tuple[Options, List[str]]:
@@ -297,15 +299,13 @@ class Parser:
 
             argument: Argument = self[arg]
             if argument.exclusive and (remains or self.__options):
-                raise ParamsParseError(
-                    'argument %r is exclusive' % arg 
-                )
+                raise ParamsParseError(f'argument {arg!r} is exclusive')
             
             if argument.mutex is not None:
                 if argument.mutex in mmp:
                     raise ParamsParseError(
-                        'conflict arguments: %r and %r mutex group(%r)' %
-                        (arg, mmp[argument.mutex], argument.mutex)
+                        f'conflict arguments: {arg!r} and {mmp[argument.mutex]!r} '
+                        f'mutex group({argument.mutex!r})'
                     )
                 mmp[argument.mutex] = arg
             
@@ -336,23 +336,18 @@ class Parser:
             else:
                 data = argv[index: index + argument.count]
                 if len(data) != argument.count:
-                    raise ParamsParseError(
-                        'not enough arguments for %r' % arg
-                    )
+                    raise ParamsParseError(f'not enough arguments for {arg!r}')
                 self.add_option(
                     argument,
                     argv[index: index + argument.count],
                 )
                 index += argument.count
-
-        for arg in self:
-            if arg.required and arg.key not in self.__options:
-                raise ParamsParseError(
-                    'position argument %r required' % arg.short or arg.long
-                )
+        # for arg in self:
+        #     if arg.required and arg.key not in self.__options:
+        #         raise ParamsParseError(f'position argument {arg.short or arg.long!r} required')
         return self.__options, remains
-    
-    def __contains__(self, key: str) -> bool:
+
+    def __contains__(self, key: Union[str, Argument]) -> bool:
         
         if isinstance(key, str):
             return key in self.globals or key in self.optionals
@@ -360,9 +355,8 @@ class Parser:
         if isinstance(key, Argument):
             return key.short in self or key.long in self
         
-        raise TypeError('unsupported type: %r, want "Argument" or "str"' % type(key))
+        raise TypeError(f'unsupported type: {type(key)!r}, want "Argument" or "str"')
 
-    
     def __getitem__(self, key) -> Argument:
         return self.optionals.get(key) or self.globals.get(key)
     
@@ -375,8 +369,8 @@ class Parser:
             yield arg
 
     def __repr__(self) -> str:
-        return '%s %s' % (self.globals, self.optionals)
-    
+        return f'{self.globals} {self.optionals}'
+
 
 class CommandMeta(type):
 
@@ -408,7 +402,7 @@ class Command(metaclass=CommandMeta):
 
     def run(self, options: Options, remains: List[str]) -> NoReturn:
         raise NotImplementedError(
-            'subclass of "Command" msut provide a'
+            'subclass of "Command" must provide a'
             'run(options, remains) method'
         )     
 
@@ -418,7 +412,7 @@ class Command(metaclass=CommandMeta):
     @classmethod
     def add_subcommand(cls, name: str) -> Callable[[CmdType], CmdType]:
         return register(cls, name)
-    
+
     @cached_property
     def parents(self) -> List[CmdType]:
         """ get parents command class list
@@ -434,8 +428,7 @@ class Command(metaclass=CommandMeta):
         return ps
     
     def get_version(self) -> str:
-        # if self.version is None:
-            # self.version = self.parent.version
+
         for p in self.parents[::-1]:
             if p.version is not None:
                 self.version = p.version
@@ -444,7 +437,7 @@ class Command(metaclass=CommandMeta):
         names = [cls.name for cls in self.parents[::-1]]
         names.append(self.name)
         name: str = '-'.join(names)
-        return '%s %s' % (name, self.version)
+        return f'{name} {self.version}'
 
     def generate_epilog(self) -> Optional[str]:
 
@@ -512,7 +505,7 @@ class Command(metaclass=CommandMeta):
         if epilog:
             parts.append(epilog)
         return '\n\n'.join(parts)
-    
+
     @classmethod
     def match_command_class(cls, argv: List[str], index: int) -> Tuple[CmdType, int]:
         if argv[index:]:
@@ -520,33 +513,18 @@ class Command(metaclass=CommandMeta):
             if sub_class:
                 return sub_class.match_command_class(argv, index + 1)
         return cls, index
-    
-    def filter(self, options: Options, remains: List[str]) -> bool:
 
-        if options.get('help'):
-            print(self.help())
-            return False
-        
-        if options.get('version'):
-            print(self.get_version())
-            return False
-        
-        return True
-    
-    def __call__(self, options: Options, remains: List[str]) -> bool:
-        
-        if not self.filter(options, remains):
-            return
-        
+    def _match_expects(self, options: Options, remains: List[Any]) -> str:
+
         if self.expects:
             index: int = len(self.expects) - len(remains)
             if index > 0:
                 expected_string: str = self.expected_string(*self.expects[0 - index:])
-                raise ParamsParseError(
-                    f'{self.command_string!r} cannot found expected argument {expected_string!r}'
-                )
+                return f'{self.command_string!r} cannot found expected argument {expected_string!r}'
             for expect in self.expects:
                 options[expect] = remains.pop(0)
+
+    def __call__(self, options: Options, remains: List[str]) -> bool:
 
         if not self.pre_run(options, remains):
             return
@@ -563,13 +541,13 @@ class Command(metaclass=CommandMeta):
     __str__ = __repr__
 
 
-class Application(Command):
+class App(Command):
     """ Application parent class """
 
     GLOBAL_ARGUMENTS: List[Argument] = []
 
     def __init__(self, args: List[str]) -> None:
-        super(Application, self).__init__(args[1:])
+        super(App, self).__init__(args[1:])
         if self.name is None:
             self.name = self.__class__.name = op.basename(args[0])
         self.parser = self.create_parser()
@@ -593,7 +571,7 @@ class Application(Command):
                 count=0,
                 exclusive=True,
             ),
-            * self.GLOBAL_ARGUMENTS
+            *self.GLOBAL_ARGUMENTS
         )
         return parser
     
@@ -609,14 +587,14 @@ class Application(Command):
         """
 
         try:
-            self.handle(*args, **kwargs)
+            self._handle(*args, **kwargs)
         except ParamsParseError as exc:
             check_error(exc)
             # FIXME print notice docs
         except SitterError as exc:
             check_error(exc)
 
-    def handle(self, *args, **kwargs) -> None:
+    def _handle(self, *args, **kwargs) -> None:
         """
 
         Args:
@@ -632,28 +610,50 @@ class Application(Command):
             self if isinstance(self, command_class)
             else command_class(self.args[index:], self.parser)
         )
+
+        # add command arguments
         self.parser.add_args(*self.command.ARGUMENTS)
 
+        # check whether the type is correct and whether the key
+        # conflicts with the parameter
         if self.command.expects:
             for expect in self.command.expects or []:
                 if not isinstance(expect, str):
                     raise TypeError(
-                        f'expects want str but get {type(expect).__name__!r}'
+                        f'expect want str but get {type(expect).__name__!r}'
                     )
-                
                 if self.parser.has_key(expect):
                     raise ArgumentError(
                         f'conflict argument and expects: {expect!r}'
                     )
 
+        # parse options and remains
         options, remains = self.parser.parse_argv(self.command.args)
+
+        # check options
+        check_error(self.check_options(options, remains))
+
+        self.command(options, remains)
+
+    def check_options(self, options: Options, remains: List[str]) -> str:
+
+        if options.get('help'):
+            print(self.help(), file=sys.stderr)
+            sys.exit(1)
+
+        if options.get('version'):
+            print(self.get_version(), file=sys.stderr)
+            sys.exit(1)
+
         # TODO optimize logic (cached default arguments)
         for arg in self.parser:
-            arg: Argument
+            if arg.required and arg.key not in options:
+                return f'position argument {arg.short or arg.long!r} required'
+
             if arg.default is not empty and arg.key not in options:
                 options[arg.key] = arg.default
-        
-        self.command(options, remains)
+
+        return self.command._match_expects(options, remains)
 
 
 def register(parent_class: CmdType, subcommand: str) -> Callable:
@@ -680,10 +680,8 @@ def register(parent_class: CmdType, subcommand: str) -> Callable:
     def wrapper(cls: CmdType) -> Callable:
 
         if not issubclass(cls, Command):
-            raise TypeError(
-                'command must derive from "Command"'
-            )
-        
+            raise TypeError('command must derive from "Command"')
+
         if not isinstance(cls.expects, (Iterable, NoneType)):
             raise TypeError(
                 f'{cls.__name__}.alias should be iterable not {type(cls.expects)!r}'

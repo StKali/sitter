@@ -3,7 +3,7 @@
 # date: 2022/11/12
 
 import pytest
-from sitter.utils import *
+from sitter.util import *
 
 
 params = pytest.mark.parametrize

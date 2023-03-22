@@ -6,6 +6,7 @@ import random
 from string import printable
 from typing import Iterable
 
+
 def rand_string(_min: int, _max: int) -> str:
     return ''.join(
         random.choice(printable) for _ in 

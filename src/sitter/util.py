@@ -38,8 +38,8 @@ class cached_property:
             self.func: Callable = self.real_func
         elif name != self.name:
             raise TypeError(
-                "Cannot assign the same cached_property to two different names "
-                "(%r and %r)." % (self.name, name)
+                'Cannot assign the same cached_property to two different names '
+                f'({self.name!r} and {name!r})'
             )
 
     def __get__(self, instance: Any, cls=None):
