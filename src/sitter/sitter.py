@@ -314,7 +314,7 @@ class Parser:
                 continue
 
             if argument.count == 1:
-                self.add_option(argument, True)
+                self.add_option(argument, argv[index])
                 index += 1
                 continue
 
