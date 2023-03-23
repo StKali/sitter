@@ -67,7 +67,7 @@ else:
             mutex: Any = None,
             exclusive: bool = False
         ) -> None:
-            self.shor: str = short
+            self.short: str = short
             self.long: str = long
             self.default: Any = default
             self.docs: str = docs
@@ -402,7 +402,7 @@ class Command(metaclass=CommandMeta):
 
     def run(self, options: Options, remains: List[str]) -> NoReturn:
         raise NotImplementedError(
-            'subclass of "Command" must provide a'
+            'subclass of "Command" must provide a '
             'run(options, remains) method'
         )     
 
